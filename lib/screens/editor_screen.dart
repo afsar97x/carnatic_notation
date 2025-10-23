@@ -44,12 +44,7 @@ class _EditorScreenState extends State<EditorScreen> {
 
   Future<void> _saveSong() async {
     if (_titleController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Please enter a song title', style: GoogleFonts.poppins()),
-          backgroundColor: Colors.red,
-        ),
-      );
+      _showSnackBar('Please enter a song title', isError: true);
       return;
     }
 
@@ -65,35 +60,46 @@ class _EditorScreenState extends State<EditorScreen> {
 
       final localStorage = context.read<LocalStorageService>();
       if (updatedSong.id.isEmpty || updatedSong.id.startsWith('song_')) {
-        // New song or local song
         await localStorage.createSong(updatedSong);
       } else {
         await localStorage.updateSong(updatedSong);
       }
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Song saved!', style: GoogleFonts.poppins()),
-            backgroundColor: Colors.green,
-          ),
-        );
+        _showSnackBar('Song saved successfully!', isError: false);
         Navigator.of(context).pop();
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error saving song: $e', style: GoogleFonts.poppins()),
-            backgroundColor: Colors.red,
-          ),
-        );
+        _showSnackBar('Error saving song: $e', isError: true);
       }
     } finally {
       if (mounted) {
         setState(() => _isSaving = false);
       }
     }
+  }
+
+  void _showSnackBar(String message, {required bool isError}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          message,
+          style: GoogleFonts.poppins(
+            color: Colors.white,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        backgroundColor: isError
+            ? const Color(0xFFE63946)
+            : const Color(0xFF06D6A0),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        margin: const EdgeInsets.all(20),
+      ),
+    );
   }
 
   void _toggleEditMode() {
@@ -105,7 +111,6 @@ class _EditorScreenState extends State<EditorScreen> {
   }
 
   void _showSwaraKeyboard(int start, int end) {
-    // Find existing segment for this selection
     final existingSegment = _segments.where((seg) {
       return seg.startIndex == start && seg.endIndex == end;
     }).firstOrNull;
@@ -122,11 +127,9 @@ class _EditorScreenState extends State<EditorScreen> {
           initialSwaras: existingSegment?.swaras ?? [],
           onSwarasChanged: (swaras) {
             setState(() {
-              // Remove any existing segments that overlap with this selection
               _segments.removeWhere((seg) => seg.overlapsWith(start, end));
 
               if (swaras.isNotEmpty) {
-                // Add new segment
                 _segments.add(NotationSegment(
                   id: const Uuid().v4(),
                   startIndex: start,
@@ -135,7 +138,6 @@ class _EditorScreenState extends State<EditorScreen> {
                 ));
               }
 
-              // Sort segments by start index
               _segments.sort((a, b) => a.startIndex.compareTo(b.startIndex));
             });
           },
@@ -147,121 +149,50 @@ class _EditorScreenState extends State<EditorScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          _isEditMode ? 'Edit Notation' : 'Song Editor',
-          style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
-        ),
-        actions: [
-          if (_lyricsController.text.isNotEmpty)
-            IconButton(
-              icon: Icon(
-                _isEditMode ? Icons.visibility : Icons.edit,
-                color: _isEditMode ? Theme.of(context).colorScheme.primary : null,
-              ),
-              onPressed: _toggleEditMode,
-              tooltip: _isEditMode ? 'View Mode' : 'Edit Notation',
-            ),
-          IconButton(
-            icon: _isSaving
-                ? SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        Theme.of(context).colorScheme.primary,
-                      ),
-                    ),
-                  )
-                : const Icon(Icons.save),
-            onPressed: _isSaving ? null : _saveSong,
-            tooltip: 'Save Song',
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color(0xFF1a1a2e),
+              Color(0xFF16213e),
+              Color(0xFF0f3460),
+            ],
           ),
-        ],
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
+        ),
+        child: SafeArea(
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Title Field
-              Container(
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surface,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: TextField(
-                  controller: _titleController,
-                  style: GoogleFonts.poppins(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  decoration: InputDecoration(
-                    hintText: 'Song Title',
-                    hintStyle: GoogleFonts.poppins(
-                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.4),
-                    ),
-                    prefixIcon: Icon(
-                      Icons.title,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.all(20),
+              // Custom AppBar
+              _buildCustomAppBar(),
+
+              // Content
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Title Field
+                      _buildTitleField(),
+
+                      const SizedBox(height: 24),
+
+                      // Lyrics Section Header
+                      _buildLyricsHeader(),
+
+                      const SizedBox(height: 12),
+
+                      // Lyrics Editor/Display
+                      if (_isEditMode)
+                        _buildEditModeLyrics()
+                      else
+                        _buildLyricsEditor(),
+                    ],
                   ),
                 ),
-              ).animate().fadeIn().slideY(begin: -0.2, end: 0),
-
-              const SizedBox(height: 24),
-
-              // Lyrics Label
-              Row(
-                children: [
-                  Text(
-                    'Lyrics',
-                    style: GoogleFonts.poppins(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: Theme.of(context).colorScheme.onBackground,
-                    ),
-                  ),
-                  if (_isEditMode) ...[
-                    const SizedBox(width: 12),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.primary.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        'Select text to add notation',
-                        style: GoogleFonts.poppins(
-                          fontSize: 12,
-                          color: Theme.of(context).colorScheme.primary,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ).animate(onPlay: (controller) => controller.repeat(reverse: true))
-                        .fadeIn(duration: 1000.ms),
-                  ],
-                ],
-              ).animate().fadeIn(delay: 100.ms),
-
-              const SizedBox(height: 12),
-
-              // Lyrics Display/Editor
-              if (_isEditMode)
-                _buildEditModeLyrics()
-              else
-                _buildLyricsEditor(),
+              ),
             ],
           ),
         ),
@@ -269,34 +200,309 @@ class _EditorScreenState extends State<EditorScreen> {
     );
   }
 
+  Widget _buildCustomAppBar() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.white.withOpacity(0.1),
+            Colors.white.withOpacity(0.05),
+          ],
+        ),
+        border: Border(
+          bottom: BorderSide(
+            color: Colors.white.withOpacity(0.1),
+            width: 1,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          // Back Button
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: Colors.white.withOpacity(0.2),
+                width: 1,
+              ),
+            ),
+            child: IconButton(
+              icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ).animate().fadeIn().scale(),
+
+          const SizedBox(width: 16),
+
+          // Title
+          Expanded(
+            child: Text(
+              _isEditMode ? 'Edit Notation' : 'Song Editor',
+              style: GoogleFonts.poppins(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+                letterSpacing: -0.5,
+              ),
+            ).animate().fadeIn(delay: 100.ms).slideX(begin: 0.2, end: 0),
+          ),
+
+          // Edit Mode Toggle
+          if (_lyricsController.text.isNotEmpty) ...[
+            Container(
+              decoration: BoxDecoration(
+                gradient: _isEditMode
+                    ? const LinearGradient(
+                        colors: [Color(0xFFFF6B35), Color(0xFFF7931E)],
+                      )
+                    : null,
+                color: _isEditMode ? null : Colors.white.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: _isEditMode
+                      ? const Color(0xFFFF6B35)
+                      : Colors.white.withOpacity(0.2),
+                  width: 1,
+                ),
+              ),
+              child: IconButton(
+                icon: Icon(
+                  _isEditMode ? Icons.visibility_rounded : Icons.edit_rounded,
+                  color: Colors.white,
+                ),
+                onPressed: _toggleEditMode,
+                tooltip: _isEditMode ? 'View Mode' : 'Edit Notation',
+              ),
+            ).animate().fadeIn(delay: 200.ms).scale(),
+            const SizedBox(width: 12),
+          ],
+
+          // Save Button
+          Container(
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFFFF6B35),
+                  Color(0xFFF7931E),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFFF6B35).withOpacity(0.4),
+                  blurRadius: 12,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: IconButton(
+              icon: _isSaving
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                  : const Icon(Icons.save_rounded, color: Colors.white),
+              onPressed: _isSaving ? null : _saveSong,
+              tooltip: 'Save Song',
+            ),
+          ).animate().fadeIn(delay: 300.ms).scale(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTitleField() {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.white.withOpacity(0.15),
+            Colors.white.withOpacity(0.05),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.2),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: TextField(
+        controller: _titleController,
+        style: GoogleFonts.poppins(
+          fontSize: 20,
+          fontWeight: FontWeight.w600,
+          color: Colors.white,
+        ),
+        decoration: InputDecoration(
+          hintText: 'Song Title',
+          hintStyle: GoogleFonts.poppins(
+            color: Colors.white.withOpacity(0.4),
+            fontSize: 20,
+            fontWeight: FontWeight.w600,
+          ),
+          prefixIcon: Container(
+            padding: const EdgeInsets.all(12),
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFFF6B35), Color(0xFFF7931E)],
+                ),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(
+                Icons.title_rounded,
+                color: Colors.white,
+                size: 20,
+              ),
+            ),
+          ),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 20,
+            vertical: 20,
+          ),
+        ),
+      ),
+    ).animate().fadeIn().slideY(begin: -0.2, end: 0);
+  }
+
+  Widget _buildLyricsHeader() {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFFFF6B35), Color(0xFFF7931E)],
+            ),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: const Icon(
+            Icons.lyrics_rounded,
+            color: Colors.white,
+            size: 20,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Text(
+          'Lyrics',
+          style: GoogleFonts.poppins(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+            letterSpacing: -0.3,
+          ),
+        ),
+        if (_isEditMode) ...[
+          const SizedBox(width: 16),
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    const Color(0xFFFF6B35).withOpacity(0.3),
+                    const Color(0xFFF7931E).withOpacity(0.2),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: const Color(0xFFFF6B35).withOpacity(0.5),
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.touch_app_rounded,
+                    color: Color(0xFFFF6B35),
+                    size: 16,
+                  ),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      'Tap words to add notation',
+                      style: GoogleFonts.poppins(
+                        fontSize: 13,
+                        color: Colors.white,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            )
+                .animate(onPlay: (controller) => controller.repeat(reverse: true))
+                .fadeIn(duration: 1500.ms),
+          ),
+        ],
+      ],
+    ).animate().fadeIn(delay: 100.ms);
+  }
+
   Widget _buildLyricsEditor() {
     return Container(
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(16),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.white.withOpacity(0.15),
+            Colors.white.withOpacity(0.05),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.2),
+          width: 1.5,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
           ),
         ],
       ),
       child: TextField(
         controller: _lyricsController,
         maxLines: null,
-        minLines: 10,
+        minLines: 12,
         style: GoogleFonts.poppins(
           fontSize: 16,
           height: 1.8,
+          color: Colors.white,
         ),
         decoration: InputDecoration(
-          hintText: 'Enter lyrics here...',
+          hintText: 'Enter your lyrics here...\n\nTap the eye icon to add notation',
           hintStyle: GoogleFonts.poppins(
-            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.4),
+            color: Colors.white.withOpacity(0.3),
+            fontSize: 16,
           ),
           border: InputBorder.none,
-          contentPadding: const EdgeInsets.all(20),
+          contentPadding: const EdgeInsets.all(24),
         ),
       ),
     ).animate().fadeIn(delay: 200.ms);
@@ -306,49 +512,124 @@ class _EditorScreenState extends State<EditorScreen> {
     final lyrics = _lyricsController.text;
     if (lyrics.isEmpty) {
       return Container(
-        padding: const EdgeInsets.all(40),
+        padding: const EdgeInsets.all(60),
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: BorderRadius.circular(16),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Colors.white.withOpacity(0.1),
+              Colors.white.withOpacity(0.05),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: Colors.white.withOpacity(0.2),
+            width: 1.5,
+          ),
         ),
         child: Center(
-          child: Text(
-            'Add lyrics first to start adding notation',
-            style: GoogleFonts.poppins(
-              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
-            ),
-            textAlign: TextAlign.center,
+          child: Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      const Color(0xFFFF6B35).withOpacity(0.2),
+                      const Color(0xFFF7931E).withOpacity(0.1),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Icon(
+                  Icons.music_note_outlined,
+                  size: 60,
+                  color: Color(0xFFFF6B35),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'No lyrics yet',
+                style: GoogleFonts.poppins(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Add lyrics first to start adding notation',
+                style: GoogleFonts.poppins(
+                  fontSize: 14,
+                  color: Colors.white.withOpacity(0.5),
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
           ),
         ),
       );
     }
 
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(16),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.white.withOpacity(0.15),
+            Colors.white.withOpacity(0.05),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.2),
+          width: 1.5,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
           ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Display notation and lyrics
           _buildNotationDisplay(lyrics),
           const SizedBox(height: 24),
-          // Selection helper
-          Text(
-            'Tap any word or select text to add notation',
-            style: GoogleFonts.poppins(
-              fontSize: 12,
-              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
-              fontStyle: FontStyle.italic,
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: Colors.white.withOpacity(0.1),
+                width: 1,
+              ),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.info_outline_rounded,
+                  color: Color(0xFFFF6B35),
+                  size: 18,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Tap words to add notation • Long press to remove',
+                    style: GoogleFonts.poppins(
+                      fontSize: 13,
+                      color: Colors.white.withOpacity(0.7),
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -358,7 +639,7 @@ class _EditorScreenState extends State<EditorScreen> {
 
   Widget _buildNotationDisplay(String lyrics) {
     return Wrap(
-      spacing: 8,
+      spacing: 10,
       runSpacing: 16,
       children: _buildLyricsSpans(lyrics),
     );
@@ -368,25 +649,21 @@ class _EditorScreenState extends State<EditorScreen> {
     final List<Widget> widgets = [];
     int currentIndex = 0;
 
-    // Sort segments by start index
     final sortedSegments = List<NotationSegment>.from(_segments)
       ..sort((a, b) => a.startIndex.compareTo(b.startIndex));
 
     for (final segment in sortedSegments) {
-      // Add text before this segment (if any)
       if (currentIndex < segment.startIndex) {
         final text = lyrics.substring(currentIndex, segment.startIndex);
         widgets.addAll(_buildTextSpans(text, currentIndex));
         currentIndex = segment.startIndex;
       }
 
-      // Add segment with notation
       final segmentText = lyrics.substring(segment.startIndex, segment.endIndex);
       widgets.add(_buildNotatedWord(segmentText, segment));
       currentIndex = segment.endIndex;
     }
 
-    // Add remaining text
     if (currentIndex < lyrics.length) {
       final text = lyrics.substring(currentIndex);
       widgets.addAll(_buildTextSpans(text, currentIndex));
@@ -419,20 +696,27 @@ class _EditorScreenState extends State<EditorScreen> {
     return GestureDetector(
       onTap: () => _showSwaraKeyboard(start, end),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.3),
-          borderRadius: BorderRadius.circular(8),
+          gradient: LinearGradient(
+            colors: [
+              const Color(0xFFFF6B35).withOpacity(0.15),
+              const Color(0xFFF7931E).withOpacity(0.1),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: Theme.of(context).colorScheme.primary.withOpacity(0.2),
+            color: const Color(0xFFFF6B35).withOpacity(0.3),
+            width: 1,
           ),
         ),
         child: Text(
           word,
           style: GoogleFonts.poppins(
             fontSize: 16,
-            height: 1.8,
-            color: Theme.of(context).colorScheme.onSurface,
+            height: 1.5,
+            color: Colors.white.withOpacity(0.9),
+            fontWeight: FontWeight.w400,
           ),
         ),
       ),
@@ -443,48 +727,52 @@ class _EditorScreenState extends State<EditorScreen> {
     return GestureDetector(
       onTap: () => _showSwaraKeyboard(segment.startIndex, segment.endIndex),
       onLongPress: () {
-        // Long press to delete notation
         setState(() {
           _segments.removeWhere((s) => s.id == segment.id);
         });
+        _showSnackBar('Notation removed', isError: false);
       },
       child: Container(
-        padding: const EdgeInsets.all(8),
+        padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          gradient: LinearGradient(
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
             colors: [
-              Theme.of(context).colorScheme.primary.withOpacity(0.1),
-              Theme.of(context).colorScheme.secondary.withOpacity(0.1),
+              Color(0xFFFF6B35),
+              Color(0xFFF7931E),
             ],
           ),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
-            width: 2,
-          ),
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFFFF6B35).withOpacity(0.4),
+              blurRadius: 12,
+              offset: const Offset(0, 6),
+            ),
+          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Notation
             Text(
               segment.swarasDisplay,
               style: GoogleFonts.poppins(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: Theme.of(context).colorScheme.primary,
-                height: 1.2,
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+                height: 1.3,
+                letterSpacing: 0.5,
               ),
             ),
-            const SizedBox(height: 4),
-            // Lyrics
+            const SizedBox(height: 6),
             Text(
               word,
               style: GoogleFonts.poppins(
                 fontSize: 16,
-                height: 1.8,
-                color: Theme.of(context).colorScheme.onSurface,
-                fontWeight: FontWeight.w500,
+                height: 1.5,
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ],
