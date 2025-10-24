@@ -277,8 +277,6 @@ class _EditorScreenState extends State<EditorScreen> {
                 ],
               ),
 
-              // Floating toolbar for text selection
-              if (_showFloatingToolbar) _buildFloatingToolbar(),
             ],
           ),
         ),

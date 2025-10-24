@@ -164,7 +164,65 @@ class _LineByLineEditorState extends State<LineByLineEditor> {
 
   Widget _buildNotationLine(int index) {
     final notation = _getNotationForLine(index);
+    final isSelected = _selectedLineIndex == index && _currentSelection != null &&
+                       _currentSelection!.start != _currentSelection!.end;
 
+    // If this lyrics line is selected, show a text input in the notation line above
+    if (isSelected) {
+      return Container(
+        height: 40,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFF6B35).withOpacity(0.15),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: const Color(0xFFFF6B35).withOpacity(0.5),
+            width: 1.5,
+          ),
+        ),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.music_note_rounded,
+              color: Color(0xFFFF6B35),
+              size: 14,
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: TextField(
+                autofocus: true,
+                style: GoogleFonts.poppins(
+                  fontSize: 13,
+                  color: Colors.white,
+                  fontWeight: FontWeight.w500,
+                ),
+                decoration: InputDecoration(
+                  hintText: 'Add notation...',
+                  hintStyle: GoogleFonts.poppins(
+                    fontSize: 13,
+                    color: Colors.white.withOpacity(0.4),
+                  ),
+                  border: InputBorder.none,
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 8,
+                  ),
+                ),
+                onSubmitted: (value) {
+                  if (value.trim().isNotEmpty) {
+                    // Parse and save notation
+                    _saveNotation(index, value);
+                  }
+                },
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Otherwise show the notation display
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
@@ -191,6 +249,17 @@ class _LineByLineEditorState extends State<LineByLineEditor> {
         ),
       ),
     );
+  }
+
+  void _saveNotation(int lineIndex, String input) {
+    final selection = _controllers[lineIndex].selection;
+    widget.onTextSelected(lineIndex, selection.start, selection.end);
+    // The parent will handle saving via the floating toolbar method
+    // For now, just clear the selection to hide the input
+    setState(() {
+      _selectedLineIndex = null;
+      _currentSelection = null;
+    });
   }
 
   Widget _buildLyricsLine(int index) {
