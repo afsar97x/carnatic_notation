@@ -23,13 +23,23 @@ class LineByLineEditor extends StatefulWidget {
 class _LineByLineEditorState extends State<LineByLineEditor> {
   late List<TextEditingController> _controllers;
   late List<FocusNode> _focusNodes;
+  final FocusNode _notationFocusNode = FocusNode();
   int? _selectedLineIndex;
   TextSelection? _currentSelection;
+  bool _isNotationInputFocused = false;
+  TextSelection? _selectionOnMouseUp; // Capture selection when mouse button is released
 
   @override
   void initState() {
     super.initState();
     _initializeControllers();
+
+    // Listen to notation focus changes
+    _notationFocusNode.addListener(() {
+      setState(() {
+        _isNotationInputFocused = _notationFocusNode.hasFocus;
+      });
+    });
   }
 
   void _initializeControllers() {
@@ -58,22 +68,39 @@ class _LineByLineEditorState extends State<LineByLineEditor> {
         if (focusNode.hasFocus) {
           setState(() => _selectedLineIndex = index);
         } else {
-          // When focus is lost, notify parent that selection is cleared
-          widget.onTextSelected(index, 0, 0);
+          // IMMEDIATELY capture the selection when losing focus (before it changes)
+          final currentSelection = _controllers[index].selection;
+
+          // Update the selection state immediately
+          if (currentSelection.start != currentSelection.end) {
+            setState(() {
+              _selectedLineIndex = index;
+              _currentSelection = currentSelection;
+            });
+          }
+
+          // When losing focus, delay checking if we should clear selection
+          // This gives time for notation input to gain focus
+          Future.delayed(const Duration(milliseconds: 50), () {
+            if (!_isNotationInputFocused && mounted) {
+              // Clear selection in state
+              if (_selectedLineIndex == index) {
+                setState(() {
+                  _selectedLineIndex = null;
+                  _currentSelection = null;
+                });
+              }
+              widget.onTextSelected(index, 0, 0);
+            }
+          });
         }
       });
     }
   }
 
   void _onTextChanged(int lineIndex) {
+    // Notify parent about selection changes
     final selection = _controllers[lineIndex].selection;
-
-    setState(() {
-      _selectedLineIndex = lineIndex;
-      _currentSelection = selection;
-    });
-
-    // Always notify parent about selection changes (including when cleared)
     widget.onTextSelected(lineIndex, selection.start, selection.end);
 
     // Notify parent of line changes
@@ -112,6 +139,7 @@ class _LineByLineEditorState extends State<LineByLineEditor> {
     for (final focusNode in _focusNodes) {
       focusNode.dispose();
     }
+    _notationFocusNode.dispose();
     super.dispose();
   }
 
@@ -169,56 +197,79 @@ class _LineByLineEditorState extends State<LineByLineEditor> {
 
     // If this lyrics line is selected, show a text input in the notation line above
     if (isSelected) {
-      return Container(
-        height: 40,
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: const Color(0xFFFF6B35).withOpacity(0.15),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: const Color(0xFFFF6B35).withOpacity(0.5),
-            width: 1.5,
-          ),
-        ),
-        child: Row(
-          children: [
-            const Icon(
-              Icons.music_note_rounded,
-              color: Color(0xFFFF6B35),
-              size: 14,
-            ),
-            const SizedBox(width: 6),
-            Expanded(
-              child: TextField(
-                autofocus: true,
-                style: GoogleFonts.poppins(
-                  fontSize: 13,
-                  color: Colors.white,
-                  fontWeight: FontWeight.w500,
+      return Row(
+        children: [
+          IntrinsicWidth(
+            child: Container(
+              constraints: const BoxConstraints(
+                minWidth: 150,
+                maxWidth: 400,
+              ),
+              height: 40,
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFF6B35).withOpacity(0.15),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: const Color(0xFFFF6B35).withOpacity(0.5),
+                  width: 1.5,
                 ),
-                decoration: InputDecoration(
-                  hintText: 'Add notation...',
-                  hintStyle: GoogleFonts.poppins(
-                    fontSize: 13,
-                    color: Colors.white.withOpacity(0.4),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.music_note_rounded,
+                    color: Color(0xFFFF6B35),
+                    size: 14,
                   ),
-                  border: InputBorder.none,
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 8,
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: GestureDetector(
+                      onTapDown: (_) {
+                        // Capture selection when user taps notation box
+                        if (_selectedLineIndex != null && _selectedLineIndex! < _controllers.length) {
+                          final selection = _selectionOnMouseUp ?? _controllers[_selectedLineIndex!].selection;
+                          setState(() {
+                            _currentSelection = selection;
+                          });
+                        }
+                      },
+                      child: TextField(
+                        focusNode: _notationFocusNode,
+                        autofocus: true,
+                        style: GoogleFonts.poppins(
+                          fontSize: 13,
+                          color: Colors.white,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: 'Add notation...',
+                          hintStyle: GoogleFonts.poppins(
+                            fontSize: 13,
+                            color: Colors.white.withOpacity(0.4),
+                          ),
+                          border: InputBorder.none,
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 8,
+                          ),
+                        ),
+                        onSubmitted: (value) {
+                          if (value.trim().isNotEmpty) {
+                            // Parse and save notation
+                            _saveNotation(index, value);
+                          }
+                        },
+                      ),
+                    ),
                   ),
-                ),
-                onSubmitted: (value) {
-                  if (value.trim().isNotEmpty) {
-                    // Parse and save notation
-                    _saveNotation(index, value);
-                  }
-                },
+                ],
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       );
     }
 
@@ -263,10 +314,35 @@ class _LineByLineEditorState extends State<LineByLineEditor> {
   }
 
   Widget _buildLyricsLine(int index) {
-    return TextField(
+    final isThisLineSelected = _selectedLineIndex == index;
+    final hasSelection = _currentSelection != null &&
+                        _currentSelection!.start != _currentSelection!.end;
+    final showCustomHighlight = isThisLineSelected &&
+                                hasSelection &&
+                                _isNotationInputFocused;
+
+    return Stack(
+      children: [
+        // Show selection overlay when notation input is focused
+        if (showCustomHighlight)
+          Positioned.fill(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              child: _buildTextWithHighlight(index),
+            ),
+          ),
+        // The actual TextField
+        Listener(
+          onPointerUp: (_) {
+            setState(() {
+              _selectionOnMouseUp = _controllers[index].selection;
+            });
+          },
+          child: TextField(
       controller: _controllers[index],
       focusNode: _focusNodes[index],
       maxLines: 1,
+      enableInteractiveSelection: true,
       textInputAction: TextInputAction.next,
       onSubmitted: (_) {
         // When Enter is pressed, add a new line if this is the last one
@@ -284,7 +360,33 @@ class _LineByLineEditorState extends State<LineByLineEditor> {
               if (_focusNodes[newIndex].hasFocus) {
                 setState(() => _selectedLineIndex = newIndex);
               } else {
-                widget.onTextSelected(newIndex, 0, 0);
+                // IMMEDIATELY capture the selection when losing focus (before it changes)
+                final currentSelection = _controllers[newIndex].selection;
+
+                // Update the selection state immediately
+                if (currentSelection.start != currentSelection.end) {
+                  setState(() {
+                    _selectedLineIndex = newIndex;
+                    _currentSelection = currentSelection;
+                  });
+                }
+
+                // When losing focus, delay checking if we should clear selection
+                Future.delayed(const Duration(milliseconds: 50), () {
+                  if (!_isNotationInputFocused && mounted) {
+                    if (_selectedLineIndex == newIndex) {
+                      setState(() {
+                        _selectedLineIndex = null;
+                        _currentSelection = null;
+                      });
+                    }
+                    widget.onTextSelected(newIndex, 0, 0);
+                  } else if (_isNotationInputFocused && mounted) {
+                    if (_currentSelection != null && _selectedLineIndex == newIndex) {
+                      _controllers[newIndex].selection = _currentSelection!;
+                    }
+                  }
+                });
               }
             });
           });
@@ -338,6 +440,38 @@ class _LineByLineEditorState extends State<LineByLineEditor> {
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 12,
           vertical: 12,
+        ),
+      ),
+    ), // End of TextField
+          ), // End of Listener
+        ], // End of Stack children
+    ); // End of Stack
+  }
+
+  Widget _buildTextWithHighlight(int index) {
+    final text = _controllers[index].text;
+    final sel = _currentSelection!;
+
+    return IgnorePointer(
+      child: RichText(
+        text: TextSpan(
+          style: GoogleFonts.poppins(
+            fontSize: 16,
+            color: Colors.transparent,
+            height: 1.5,
+          ),
+          children: [
+            if (sel.start > 0)
+              TextSpan(text: text.substring(0, sel.start)),
+            TextSpan(
+              text: text.substring(sel.start, sel.end),
+              style: TextStyle(
+                backgroundColor: const Color(0xFFFF6B35).withOpacity(0.4),
+              ),
+            ),
+            if (sel.end < text.length)
+              TextSpan(text: text.substring(sel.end)),
+          ],
         ),
       ),
     );
