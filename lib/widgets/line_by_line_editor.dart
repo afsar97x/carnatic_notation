@@ -36,9 +36,11 @@ class _LineByLineEditorState extends State<LineByLineEditor> {
 
     // Listen to notation focus changes
     _notationFocusNode.addListener(() {
+      print('🎵 NOTATION focus changed: ${_notationFocusNode.hasFocus}');
       setState(() {
         _isNotationInputFocused = _notationFocusNode.hasFocus;
       });
+      print('🎵 NOTATION _isNotationInputFocused set to: $_isNotationInputFocused');
     });
   }
 
@@ -66,31 +68,25 @@ class _LineByLineEditorState extends State<LineByLineEditor> {
       final index = i;
       focusNode.addListener(() {
         if (focusNode.hasFocus) {
-          setState(() => _selectedLineIndex = index);
+          print('📝 LYRICS[$index] gained focus');
+          setState(() {
+            _selectedLineIndex = index;
+          });
         } else {
-          // IMMEDIATELY capture the selection when losing focus (before it changes)
-          final currentSelection = _controllers[index].selection;
-
-          // Update the selection state immediately
-          if (currentSelection.start != currentSelection.end) {
-            setState(() {
-              _selectedLineIndex = index;
-              _currentSelection = currentSelection;
-            });
-          }
-
-          // When losing focus, delay checking if we should clear selection
-          // This gives time for notation input to gain focus
-          Future.delayed(const Duration(milliseconds: 50), () {
-            if (!_isNotationInputFocused && mounted) {
-              // Clear selection in state
-              if (_selectedLineIndex == index) {
-                setState(() {
-                  _selectedLineIndex = null;
-                  _currentSelection = null;
-                });
-              }
+          print('📝 LYRICS[$index] lost focus. Current selection: $_currentSelection, selectedLine: $_selectedLineIndex');
+          // When lyrics field loses focus, check if notation input will get focus
+          Future.delayed(const Duration(milliseconds: 150), () {
+            print('⏰ DELAY[$index] expired. _isNotationInputFocused=$_isNotationInputFocused, mounted=$mounted, _selectedLineIndex=$_selectedLineIndex');
+            // Only clear if notation input didn't get focus (user clicked outside)
+            if (!_isNotationInputFocused && mounted && _selectedLineIndex == index) {
+              print('🧹 CLEARING selection for line $index');
+              setState(() {
+                _selectedLineIndex = null;
+                _currentSelection = null;
+              });
               widget.onTextSelected(index, 0, 0);
+            } else {
+              print('✅ KEEPING selection for line $index');
             }
           });
         }
@@ -197,44 +193,35 @@ class _LineByLineEditorState extends State<LineByLineEditor> {
 
     // If this lyrics line is selected, show a text input in the notation line above
     if (isSelected) {
-      return Row(
-        children: [
-          IntrinsicWidth(
-            child: Container(
-              constraints: const BoxConstraints(
-                minWidth: 150,
-                maxWidth: 400,
-              ),
-              height: 40,
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFF6B35).withOpacity(0.15),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: const Color(0xFFFF6B35).withOpacity(0.5),
-                  width: 1.5,
+      return MouseRegion(
+        child: Row(
+          children: [
+            IntrinsicWidth(
+              child: Container(
+                constraints: const BoxConstraints(
+                  minWidth: 150,
+                  maxWidth: 400,
                 ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.music_note_rounded,
-                    color: Color(0xFFFF6B35),
-                    size: 14,
+                height: 40,
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFF6B35).withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: const Color(0xFFFF6B35).withOpacity(0.5),
+                    width: 1.5,
                   ),
-                  const SizedBox(width: 6),
-                  Flexible(
-                    child: GestureDetector(
-                      onTapDown: (_) {
-                        // Capture selection when user taps notation box
-                        if (_selectedLineIndex != null && _selectedLineIndex! < _controllers.length) {
-                          final selection = _selectionOnMouseUp ?? _controllers[_selectedLineIndex!].selection;
-                          setState(() {
-                            _currentSelection = selection;
-                          });
-                        }
-                      },
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.music_note_rounded,
+                      color: Color(0xFFFF6B35),
+                      size: 14,
+                    ),
+                    const SizedBox(width: 6),
+                    Flexible(
                       child: TextField(
                         focusNode: _notationFocusNode,
                         autofocus: true,
@@ -264,12 +251,12 @@ class _LineByLineEditorState extends State<LineByLineEditor> {
                         },
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       );
     }
 
@@ -321,22 +308,24 @@ class _LineByLineEditorState extends State<LineByLineEditor> {
                                 hasSelection &&
                                 _isNotationInputFocused;
 
+    print('🎨 BUILD LYRICS[$index]: selected=$isThisLineSelected, hasSelection=$hasSelection, notationFocused=$_isNotationInputFocused, SHOW=$showCustomHighlight');
+
     return Stack(
       children: [
-        // Show selection overlay when notation input is focused
-        if (showCustomHighlight)
-          Positioned.fill(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-              child: _buildTextWithHighlight(index),
-            ),
-          ),
-        // The actual TextField
         Listener(
           onPointerUp: (_) {
-            setState(() {
-              _selectionOnMouseUp = _controllers[index].selection;
-            });
+            // Capture selection immediately when mouse is released
+            final selection = _controllers[index].selection;
+            print('🖱️ POINTER UP on line $index: selection=${selection.start}-${selection.end}');
+            if (selection.start != selection.end) {
+              print('💾 SAVING selection: ${selection.start}-${selection.end} for line $index');
+              setState(() {
+                _selectedLineIndex = index;
+                _currentSelection = selection;
+                _selectionOnMouseUp = selection;
+              });
+              print('💾 State updated: _selectedLineIndex=$_selectedLineIndex, _currentSelection=$_currentSelection');
+            }
           },
           child: TextField(
       controller: _controllers[index],
@@ -358,33 +347,19 @@ class _LineByLineEditorState extends State<LineByLineEditor> {
             });
             _focusNodes[newIndex].addListener(() {
               if (_focusNodes[newIndex].hasFocus) {
-                setState(() => _selectedLineIndex = newIndex);
+                setState(() {
+                  _selectedLineIndex = newIndex;
+                });
               } else {
-                // IMMEDIATELY capture the selection when losing focus (before it changes)
-                final currentSelection = _controllers[newIndex].selection;
-
-                // Update the selection state immediately
-                if (currentSelection.start != currentSelection.end) {
-                  setState(() {
-                    _selectedLineIndex = newIndex;
-                    _currentSelection = currentSelection;
-                  });
-                }
-
-                // When losing focus, delay checking if we should clear selection
-                Future.delayed(const Duration(milliseconds: 50), () {
-                  if (!_isNotationInputFocused && mounted) {
-                    if (_selectedLineIndex == newIndex) {
-                      setState(() {
-                        _selectedLineIndex = null;
-                        _currentSelection = null;
-                      });
-                    }
+                // When lyrics field loses focus, check if notation input will get focus
+                Future.delayed(const Duration(milliseconds: 150), () {
+                  // Only clear if notation input didn't get focus (user clicked outside)
+                  if (!_isNotationInputFocused && mounted && _selectedLineIndex == newIndex) {
+                    setState(() {
+                      _selectedLineIndex = null;
+                      _currentSelection = null;
+                    });
                     widget.onTextSelected(newIndex, 0, 0);
-                  } else if (_isNotationInputFocused && mounted) {
-                    if (_currentSelection != null && _selectedLineIndex == newIndex) {
-                      _controllers[newIndex].selection = _currentSelection!;
-                    }
                   }
                 });
               }
@@ -443,36 +418,48 @@ class _LineByLineEditorState extends State<LineByLineEditor> {
         ),
       ),
     ), // End of TextField
-          ), // End of Listener
-        ], // End of Stack children
-    ); // End of Stack
+        ), // End of Listener
+        // Highlight overlay when notation input is focused
+        if (showCustomHighlight)
+          Positioned(
+            left: 13,
+            right: 13,
+            top: 13,
+            bottom: 13,
+            child: Transform.translate(
+              offset: const Offset(6, 0), // Shift 6px to the right to fix alignment
+              child: IgnorePointer(
+                child: _buildHighlightOverlay(index),
+              ),
+            ),
+          ),
+      ],
+    );
   }
 
-  Widget _buildTextWithHighlight(int index) {
+  Widget _buildHighlightOverlay(int index) {
     final text = _controllers[index].text;
     final sel = _currentSelection!;
 
-    return IgnorePointer(
-      child: RichText(
-        text: TextSpan(
-          style: GoogleFonts.poppins(
-            fontSize: 16,
-            color: Colors.transparent,
-            height: 1.5,
-          ),
-          children: [
-            if (sel.start > 0)
-              TextSpan(text: text.substring(0, sel.start)),
-            TextSpan(
-              text: text.substring(sel.start, sel.end),
-              style: TextStyle(
-                backgroundColor: const Color(0xFFFF6B35).withOpacity(0.4),
-              ),
-            ),
-            if (sel.end < text.length)
-              TextSpan(text: text.substring(sel.end)),
-          ],
+    return RichText(
+      text: TextSpan(
+        style: GoogleFonts.poppins(
+          fontSize: 16,
+          color: Colors.transparent,
+          height: 1.5,
         ),
+        children: [
+          if (sel.start > 0)
+            TextSpan(text: text.substring(0, sel.start)),
+          TextSpan(
+            text: text.substring(sel.start, sel.end),
+            style: TextStyle(
+              backgroundColor: const Color(0xFFFF6B35).withOpacity(0.4),
+            ),
+          ),
+          if (sel.end < text.length)
+            TextSpan(text: text.substring(sel.end)),
+        ],
       ),
     );
   }
