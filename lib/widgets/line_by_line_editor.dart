@@ -197,6 +197,43 @@ class _LineByLineEditorState extends State<LineByLineEditor> {
     return TextField(
       controller: _controllers[index],
       focusNode: _focusNodes[index],
+      maxLines: 1,
+      textInputAction: TextInputAction.next,
+      onSubmitted: (_) {
+        // When Enter is pressed, add a new line if this is the last one
+        if (index == _controllers.length - 1) {
+          setState(() {
+            _controllers.add(TextEditingController());
+            _focusNodes.add(FocusNode());
+
+            // Add listeners to the new controller and focus node
+            final newIndex = _controllers.length - 1;
+            _controllers[newIndex].addListener(() {
+              _onTextChanged(newIndex);
+            });
+            _focusNodes[newIndex].addListener(() {
+              if (_focusNodes[newIndex].hasFocus) {
+                setState(() => _selectedLineIndex = newIndex);
+              } else {
+                widget.onTextSelected(newIndex, 0, 0);
+              }
+            });
+          });
+
+          // Notify parent of the new line
+          widget.onLinesChanged(_controllers.map((c) => c.text).toList());
+
+          // Focus on the new line after a brief delay
+          Future.delayed(const Duration(milliseconds: 50), () {
+            if (_focusNodes.length > index + 1) {
+              _focusNodes[index + 1].requestFocus();
+            }
+          });
+        } else {
+          // Move to next line
+          _focusNodes[index + 1].requestFocus();
+        }
+      },
       style: GoogleFonts.poppins(
         fontSize: 16,
         color: Colors.white,
